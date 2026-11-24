@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Sea Salt & Paper 得点計算</title>
+
+  <!-- PWA Manifest & Icons -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0369a1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SSP得点計算" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'M PLUS Rounded 1c', sans-serif;
+      background-color: #f0f7fa;
+      background-image: radial-gradient(#bae6fd 1px, transparent 1px);
+      background-size: 20px 20px;
+      padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+    }
+    header {
+      padding-top: calc(1rem + env(safe-area-inset-top));
+    }
+    .origami-card {
+      box-shadow: 0 4px 0 #cbd5e1;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .origami-card:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #cbd5e1;
+    }
+    .origami-panel {
+      box-shadow: 0 6px 0 #cbd5e1;
+    }
+    @keyframes spinWheel {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(1440deg); }
+    }
+    .spinning {
+      animation: spinWheel 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+  </style>
+</head>
+<body class="text-slate-800 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-sky-700 text-white pb-4 px-4 shadow-md sticky top-0 z-30">
+    <div class="max-w-3xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">⛵</span>
+        <div>
+          <h1 class="text-lg sm:text-xl font-extrabold tracking-wide leading-tight">Sea Salt &amp; Paper</h1>
+          <p class="text-xs text-sky-200">基本セット 得点計算＆親決めルーレット</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="targetScoreBadge" class="bg-amber-400 text-slate-900 text-xs font-extrabold px-2.5 py-1 rounded-full shadow-sm">
+          目標: 40点
+        </span>
+        <button onclick="openSettingsModal()" class="bg-sky-800 hover:bg-sky-900 text-xs font-bold px-3 py-1.5 rounded-lg border border-sky-600 transition">
+          ⚙ 設定 / API
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 pt-5 space-y-6">
+
+    <!-- 1. プレイヤー設定 & 1番手ルーレット -->
+    <section class="bg-white rounded-2xl p-5 border-2 border-slate-200 origami-panel">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h2 class="text-base font-extrabold text-sky-800 flex items-center gap-1.5">
+          <span>🎲</span> プレイヤー設定 ＆ 1番手ルーレット
+        </h2>
+        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+          <button onclick="setPlayerCount(2)" id="btnCount2" class="px-3 py-1 text-xs font-bold rounded-md bg-sky-600 text-white">2人</button>
+          <button onclick="setPlayerCount(3)" id="btnCount3" class="px-3 py-1 text-xs font-bold rounded-md text-slate-600 hover:bg-slate-200">3人</button>
+          <button onclick="setPlayerCount(4)" id="btnCount4" class="px-3 py-1 text-xs font-bold rounded-md text-slate-600 hover:bg-slate-200">4人</button>
+        </div>
+      </div>
+
+      <div id="playerInputsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4"></div>
+
+      <div class="bg-sky-50 border border-sky-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div id="rouletteIcon" class="w-12 h-12 rounded-full bg-amber-400 border-4 border-white shadow flex items-center justify-center text-2xl select-none">
+            🧭
+          </div>
+          <div>
+            <div class="text-xs font-bold text-sky-700">スタートプレイヤー（1番手）</div>
+            <div id="firstPlayerResult" class="text-lg font-extrabold text-slate-800">未決定</div>
+          </div>
+        </div>
+        <button onclick="spinFirstPlayer()" id="spinBtn" class="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-slate-900 font-extrabold px-5 py-2.5 rounded-xl origami-card text-sm">
+          🎯 ルーレットを回す
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. ラウンド得点計算 -->
+    <section class="bg-white rounded-2xl p-5 border-2 border-slate-200 origami-panel">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base font-extrabold text-sky-800 flex items-center gap-1.5">
+          <span>🃏</span> ラウンド得点入力（手札＋場のカード）
+        </h2>
+        <button onclick="resetCurrentRoundInputs()" class="text-xs font-bold text-slate-500 hover:text-rose-600 underline">
+          全員のカードをクリア
+        </button>
+      </div>
+
+      <div id="playerTabs" class="flex gap-1.5 overflow-x-auto pb-2 mb-4 border-b border-slate-200"></div>
+
+      <div id="activePlayerPanel" class="space-y-5">
+        <div class="bg-slate-50 border-2 border-dashed border-sky-300 rounded-xl p-4">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-extrabold text-sky-900 flex items-center gap-1">
+                <span>📷</span> 写真からカードを自動カウント（Gemini AI）
+              </h3>
+              <p class="text-xs text-slate-500 mt-0.5">
+                手札と場に出したペアカードを並べて撮影すると、種類と枚数を自動入力します。
+              </p>
+            </div>
+            <label class="cursor-pointer bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl origami-card shrink-0">
+              📸 写真を撮る / 選ぶ
+              <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoUpload(event)">
+            </label>
+          </div>
+
+          <div id="photoPreviewArea" class="hidden mt-3 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center gap-4">
+            <img id="photoPreviewImg" src="" alt="手札プレビュー" class="w-32 h-32 object-cover rounded-lg border border-slate-300 shadow-sm">
+            <div class="flex-1 text-xs space-y-2">
+              <div id="aiStatusText" class="font-bold text-sky-700">画像を読み込みました。</div>
+              <button onclick="analyzeCurrentPhoto()" id="analyzeBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-lg shadow-sm">
+                ✨ AIでカードを読み取る
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span class="text-xs font-bold text-amber-800 block">現在の素点（カード得点）</span>
+            <span id="liveBreakdownText" class="text-[11px] text-slate-600">カードを追加してください</span>
+          </div>
+          <div class="text-right">
+            <span id="liveBaseScore" class="text-2xl font-extrabold text-amber-600">0</span>
+            <span class="text-xs font-bold text-amber-800">点</span>
+            <span id="liveColorBonus" class="block text-[11px] font-bold text-sky-700">最多色ボーナス: 0点</span>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <h4 class="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">ペアカード（2枚1組ごとに +1点）</h4>
+            <div id="gridPairCards" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5"></div>
+          </div>
+          <div>
+            <h4 class="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">コレクション（枚数で得点）</h4>
+            <div id="gridCollectionCards" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
+          </div>
+          <div>
+            <h4 class="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">倍率ボーナス（対応カードの枚数分）</h4>
+            <div id="gridMultiplierCards" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div class="bg-cyan-50 border border-cyan-200 rounded-xl p-3">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-extrabold text-cyan-900">🧜‍♀️ 人魚（Mermaid）</span>
+                <span class="text-[11px] font-bold text-cyan-700">4枚で即勝利！</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mb-2">1枚目＝最多色数、2枚目＝2番目に多い色数…</p>
+              <div class="flex items-center justify-between bg-white rounded-lg px-3 py-1.5 border border-cyan-200">
+                <button onclick="changeCardCount('mermaid', -1)" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 font-extrabold text-lg">−</button>
+                <span id="count_mermaid" class="font-extrabold text-base">0</span>
+                <button onclick="changeCardCount('mermaid', 1)" class="w-8 h-8 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-lg">＋</button>
+              </div>
+            </div>
+
+            <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-extrabold text-indigo-900">🎨 最多色のカード枚数</span>
+                <span class="text-[11px] font-bold text-indigo-700">ラストチャンス / 人魚用</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mb-2">手札＋場のうち、一番多い同じ色の合計枚数</p>
+              <div class="flex items-center justify-between bg-white rounded-lg px-3 py-1.5 border border-indigo-200">
+                <button onclick="changeMaxColorCount(-1)" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 font-extrabold text-lg">−</button>
+                <span id="count_maxColor" class="font-extrabold text-base">0</span>
+                <button onclick="changeMaxColorCount(1)" class="w-8 h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-lg">＋</button>
+              </div>
+              <div id="secondColorRow" class="hidden mt-2 pt-2 border-t border-indigo-200 flex items-center justify-between">
+                <span class="text-[11px] font-bold text-indigo-900">2番目に多い色の枚数（人魚2枚目用）</span>
+                <div class="flex items-center gap-2">
+                  <button onclick="changeSecondColorCount(-1)" class="w-6 h-6 rounded bg-white border font-bold">−</button>
+                  <span id="count_secondColor" class="font-extrabold text-sm">0</span>
+                  <button onclick="changeSecondColorCount(1)" class="w-6 h-6 rounded bg-indigo-600 text-white font-bold">＋</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. ラウンド終了判定 -->
+    <section class="bg-white rounded-2xl p-5 border-2 border-slate-200 origami-panel">
+      <h2 class="text-base font-extrabold text-sky-800 flex items-center gap-1.5 mb-3">
+        <span>🏁</span> ラウンド終了方法 ＆ 最終得点計算
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <label class="cursor-pointer border-2 rounded-xl p-3.5 flex items-start gap-3 transition" id="labelModeStop">
+          <input type="radio" name="endMode" value="stop" checked onchange="updateEndModeUI()" class="mt-1 accent-sky-600">
+          <div>
+            <div class="font-extrabold text-sm text-slate-800">✋ ストップ（STOP）</div>
+            <p class="text-xs text-slate-500 mt-0.5">全員が自分の「素点（カード得点）」をそのまま獲得します。カラーボーナスはなし。</p>
+          </div>
+        </label>
+
+        <label class="cursor-pointer border-2 rounded-xl p-3.5 flex items-start gap-3 transition" id="labelModeLastChance">
+          <input type="radio" name="endMode" value="last_chance" onchange="updateEndModeUI()" class="mt-1 accent-amber-500">
+          <div>
+            <div class="font-extrabold text-sm text-amber-800">⚡ ラストチャンス（LAST CHANCE）</div>
+            <p class="text-xs text-slate-500 mt-0.5">宣言者の素点が全員以上なら成功（宣言者＝素点＋色、他＝色のみ）。負けると宣言者は色のみ。</p>
+          </div>
+        </label>
+      </div>
+
+      <div id="lastChanceCallerBox" class="hidden bg-amber-50 border border-amber-300 rounded-xl p-3.5 mb-4">
+        <label class="block text-xs font-extrabold text-amber-900 mb-2">⚡ ラストチャンスを宣言したプレイヤーは誰ですか？</label>
+        <div id="callerButtons" class="flex flex-wrap gap-2"></div>
+      </div>
+
+      <div class="overflow-x-auto border border-slate-200 rounded-xl mb-4">
+        <table class="w-full text-left border-collapse text-xs sm:text-sm">
+          <thead>
+            <tr class="bg-slate-100 text-slate-600 border-b border-slate-200">
+              <th class="py-2.5 px-3 font-extrabold">プレイヤー</th>
+              <th class="py-2.5 px-2 font-extrabold text-right">素点</th>
+              <th class="py-2.5 px-2 font-extrabold text-right">色ボーナス</th>
+              <th class="py-2.5 px-3 font-extrabold text-right text-sky-800">今回獲得</th>
+            </tr>
+          </thead>
+          <tbody id="roundSummaryBody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+
+      <div id="lastChanceVerdictBanner" class="hidden mb-4 p-3 rounded-xl text-xs font-extrabold"></div>
+
+      <button onclick="commitRoundScores()" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-extrabold py-3.5 rounded-xl origami-card text-sm sm:text-base">
+        ✅ このラウンドの得点を累計スコアに加算する
+      </button>
+    </section>
+
+    <!-- 4. ラウンド履歴 -->
+    <section class="bg-white rounded-2xl p-5 border-2 border-slate-200 origami-panel">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base font-extrabold text-sky-800 flex items-center gap-1.5">
+          <span>📜</span> ゲーム履歴・累計スコア
+        </h2>
+        <button onclick="resetFullGame()" class="text-xs font-bold text-rose-600 hover:underline">
+          新しいゲームを始める（累計リセット）
+        </button>
+      </div>
+      <div id="historyList" class="text-xs text-slate-500">
+        まだ記録されたラウンドはありません。
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 設定モーダル -->
+  <div id="settingsModal" class="hidden fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-extrabold text-base text-slate-800">⚙ Gemini API設定（写真自動認識用）</h3>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-600 leading-relaxed">
+        手札の写真からカードを自動カウントするには、Google AI Studioで取得した <strong>Gemini APIキー</strong> を入力してください（端末のブラウザ内にのみ保存されます）。キーなしでも手動カウンターで全機能を利用できます。
+      </p>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">Gemini API Key</label>
+        <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500">
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeSettingsModal()" class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg">キャンセル</button>
+        <button onclick="saveApiKey()" class="px-4 py-2 text-xs font-extrabold bg-sky-600 hover:bg-sky-700 text-white rounded-lg">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Service Worker 登録（PWAオフライン動作）
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration skipped:', err));
+      });
+    }
+
+    const CARD_DEFS = {
+      crab:    { name: 'カニ', emoji: '🦀', category: 'pair' },
+      boat:    { name: '船', emoji: '⛵', category: 'pair' },
+      fish:    { name: '魚', emoji: '🐟', category: 'pair' },
+      shark:   { name: 'サメ', emoji: '🦈', category: 'pair' },
+      swimmer: { name: 'スイマー', emoji: '🏊', category: 'pair' },
+      shell:   { name: '貝殻', emoji: '🐚', category: 'collection', hint: '0/2/4/6/8/10点' },
+      octopus: { name: 'タコ', emoji: '🐙', category: 'collection', hint: '0/3/6/9/12点' },
+      penguin: { name: 'ペンギン', emoji: '🐧', category: 'collection', hint: '1/3/5点' },
+      sailor:  { name: '船乗り', emoji: '⚓', category: 'collection', hint: '0/5点' },
+      lighthouse: { name: '灯台', emoji: '🗼', category: 'multiplier', hint: '船×1点' },
+      shoal:      { name: '魚群', emoji: '🐠', category: 'multiplier', hint: '魚×1点' },
+      colony:     { name: 'コロニー', emoji: '🧊', category: 'multiplier', hint: 'ペンギン×2点' },
+      captain:    { name: '船長', emoji: '👨‍✈️', category: 'multiplier', hint: '船乗り×3点' },
+      mermaid:    { name: '人魚', emoji: '🧜‍♀️', category: 'special' }
+    };
+
+    const TARGET_SCORES = { 2: 40, 3: 35, 4: 30 };
+
+    let state = {
+      playerCount: 2,
+      players: [
+        { name: 'プレイヤー1', totalScore: 0 },
+        { name: 'プレイヤー2', totalScore: 0 },
+        { name: 'プレイヤー3', totalScore: 0 },
+        { name: 'プレイヤー4', totalScore: 0 }
+      ],
+      firstPlayerIndex: null,
+      activeTab: 0,
+      roundData: [],
+      endMode: 'stop',
+      lastChanceCaller: 0,
+      history: []
+    };
+
+    function createEmptyHand() {
+      const counts = {};
+      Object.keys(CARD_DEFS).forEach(k => counts[k] = 0);
+      return { counts, maxColor: 0, secondColor: 0, photoDataUrl: null, aiMessage: '' };
+    }
+
+    function init() {
+      for (let i = 0; i < 4; i++) state.roundData.push(createEmptyHand());
+      const savedKey = localStorage.getItem('ssp_gemini_api_key');
+      if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
+      renderAll();
+    }
+
+    function setPlayerCount(count) {
+      state.playerCount = count;
+      if (state.activeTab >= count) state.activeTab = 0;
+      if (state.lastChanceCaller >= count) state.lastChanceCaller = 0;
+      [2, 3, 4].forEach(n => {
+        const btn = document.getElementById(`btnCount${n}`);
+        btn.className = n === count
+          ? 'px-3 py-1 text-xs font-bold rounded-md bg-sky-600 text-white'
+          : 'px-3 py-1 text-xs font-bold rounded-md text-slate-600 hover:bg-slate-200';
+      });
+      document.getElementById('targetScoreBadge').textContent = `目標: ${TARGET_SCORES[count]}点`;
+      renderAll();
+    }
+
+    function updatePlayerName(idx, val) {
+      state.players[idx].name = val || `プレイヤー${idx + 1}`;
+      renderTabs();
+      renderCallerButtons();
+      renderSummaryTable();
+    }
+
+    function spinFirstPlayer() {
+      const btn = document.getElementById('spinBtn');
+      const icon = document.getElementById('rouletteIcon');
+      const resText = document.getElementById('firstPlayerResult');
+
+      btn.disabled = true;
+      icon.classList.remove('spinning');
+      void icon.offsetWidth;
+      icon.classList.add('spinning');
+
+      let ticks = 0;
+      const interval = setInterval(() => {
+        const randIdx = Math.floor(Math.random() * state.playerCount);
+        resText.textContent = state.players[randIdx].name + ' ...';
+        ticks++;
+        if (ticks > 14) {
+          clearInterval(interval);
+          const winner = Math.floor(Math.random() * state.playerCount);
+          state.firstPlayerIndex = winner;
+          resText.innerHTML = `<span class="text-sky-700">🎉 ${escapeHtml(state.players[winner].name)}</span> が1番手！`;
+          btn.disabled = false;
+          renderPlayerInputs();
+        }
+      }, 90);
+    }
+
+    function calculatePlayerScore(hand) {
+      const c = hand.counts;
+      let base = 0;
+      const parts = [];
+
+      const pairPts = Math.floor(c.crab / 2) + Math.floor(c.boat / 2) + Math.floor(c.fish / 2) + Math.min(c.shark, c.swimmer);
+      if (pairPts > 0) { base += pairPts; parts.push(`ペア+${pairPts}`); }
+
+      if (c.shell > 0) { const pts = (c.shell - 1) * 2; base += pts; parts.push(`貝殻+${pts}`); }
+      if (c.octopus > 0) { const pts = (c.octopus - 1) * 3; base += pts; parts.push(`タコ+${pts}`); }
+      if (c.penguin > 0) { const pts = c.penguin >= 3 ? 5 : [0, 1, 3, 5][c.penguin]; base += pts; parts.push(`ペンギン+${pts}`); }
+      if (c.sailor > 0) { const pts = c.sailor >= 2 ? 5 : 0; base += pts; parts.push(`船乗り+${pts}`); }
+
+      if (c.lighthouse > 0 && c.boat > 0) { const pts = c.lighthouse * c.boat; base += pts; parts.push(`灯台+${pts}`); }
+      if (c.shoal > 0 && c.fish > 0) { const pts = c.shoal * c.fish; base += pts; parts.push(`魚群+${pts}`); }
+      if (c.colony > 0 && c.penguin > 0) { const pts = c.colony * c.penguin * 2; base += pts; parts.push(`コロニー+${pts}`); }
+      if (c.captain > 0 && c.sailor > 0) { const pts = c.captain * c.sailor * 3; base += pts; parts.push(`船長+${pts}`); }
+
+      if (c.mermaid >= 4) {
+        parts.push('人魚4枚(特殊勝利!)');
+      } else if (c.mermaid > 0) {
+        let mPts = 0;
+        if (c.mermaid >= 1) mPts += hand.maxColor;
+        if (c.mermaid >= 2) mPts += hand.secondColor;
+        if (c.mermaid >= 3) mPts += Math.min(hand.secondColor, 1);
+        base += mPts;
+        parts.push(`人魚+${mPts}`);
+      }
+
+      return {
+        base,
+        colorBonus: hand.maxColor,
+        mermaidWin: c.mermaid >= 4,
+        breakdown: parts.length ? parts.join(' / ') : '得点カードなし'
+      };
+    }
+
+    function selectTab(idx) { state.activeTab = idx; renderTabs(); renderActiveHandPanel(); }
+
+    function changeCardCount(cardKey, delta) {
+      const hand = state.roundData[state.activeTab];
+      hand.counts[cardKey] = Math.max(0, hand.counts[cardKey] + delta);
+      renderActiveHandPanel(); renderSummaryTable();
+    }
+
+    function changeMaxColorCount(delta) {
+      const hand = state.roundData[state.activeTab];
+      hand.maxColor = Math.max(0, hand.maxColor + delta);
+      if (hand.secondColor > hand.maxColor) hand.secondColor = hand.maxColor;
+      renderActiveHandPanel(); renderSummaryTable();
+    }
+
+    function changeSecondColorCount(delta) {
+      const hand = state.roundData[state.activeTab];
+      hand.secondColor = Math.max(0, Math.min(hand.maxColor, hand.secondColor + delta));
+      renderActiveHandPanel(); renderSummaryTable();
+    }
+
+    function resetCurrentRoundInputs() {
+      for (let i = 0; i < 4; i++) state.roundData[i] = createEmptyHand();
+      renderActiveHandPanel(); renderSummaryTable();
+    }
+
+    function handlePhotoUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const hand = state.roundData[state.activeTab];
+        hand.photoDataUrl = e.target.result;
+        hand.aiMessage = '写真を読み込みました。「AIでカードを読み取る」を押してください。';
+        renderActiveHandPanel();
+      };
+      reader.readAsDataURL(file);
+      event.target.value = '';
+    }
+
+    async function analyzeCurrentPhoto() {
+      const apiKey = localStorage.getItem('ssp_gemini_api_key');
+      if (!apiKey) {
+        openSettingsModal();
+        alert('写真認識を使うには、先に右上の「⚙ 設定 / API」からGemini APIキーを設定してください。');
+        return;
+      }
+
+      const hand = state.roundData[state.activeTab];
+      if (!hand.photoDataUrl) return;
+
+      const btn = document.getElementById('analyzeBtn');
+      const status = document.getElementById('aiStatusText');
+      btn.disabled = true;
+      btn.textContent = '⏳ AI解析中...';
+      status.textContent = 'カードのイラストと背景色を数えています...';
+
+      try {
+        const base64Data = hand.photoDataUrl.split(',')[1];
+        const mimeType = hand.photoDataUrl.split(';')[0].split(':')[1];
+
+        const prompt = `あなたはボードゲーム『シーソルト＆ペーパー（Sea Salt & Paper）』基本セットのカード認識アシスタントです。
+画像に写っているカードの種類ごとの枚数と、カード背景色のうち最も多い色の枚数(maxColor)・2番目に多い色の枚数(secondColor)を数えて、必ず以下のJSON形式のみで返してください。
+
+対象キー: crab, boat, fish, shark, swimmer, shell, octopus, penguin, sailor, lighthouse, shoal, colony, captain, mermaid, maxColor, secondColor`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64Data } }] }],
+            generationConfig: { response_mime_type: 'application/json' }
+          })
+        });
+
+        if (!response.ok) throw new Error(`APIエラー (${response.status})`);
+
+        const data = await response.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        const parsed = JSON.parse(rawText);
+
+        Object.keys(CARD_DEFS).forEach(k => hand.counts[k] = Math.max(0, parseInt(parsed[k] || 0, 10)));
+        hand.maxColor = Math.max(0, parseInt(parsed.maxColor || 0, 10));
+        hand.secondColor = Math.max(0, parseInt(parsed.secondColor || 0, 10));
+        hand.aiMessage = '✅ AI読み取り完了！必要に応じて下のボタンで枚数を微調整してください。';
+      } catch (err) {
+        hand.aiMessage = `❌ 読み取りに失敗しました: ${err.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✨ AIでカードを読み取る';
+        renderActiveHandPanel(); renderSummaryTable();
+      }
+    }
+
+    function updateEndModeUI() {
+      const radios = document.getElementsByName('endMode');
+      for (const r of radios) if (r.checked) state.endMode = r.value;
+      const callerBox = document.getElementById('lastChanceCallerBox');
+      const labelStop = document.getElementById('labelModeStop');
+      const labelLC = document.getElementById('labelModeLastChance');
+
+      if (state.endMode === 'last_chance') {
+        callerBox.classList.remove('hidden');
+        labelLC.classList.add('border-amber-400', 'bg-amber-50/50');
+        labelStop.classList.remove('border-sky-500', 'bg-sky-50/50');
+      } else {
+        callerBox.classList.add('hidden');
+        labelStop.classList.add('border-sky-500', 'bg-sky-50/50');
+        labelLC.classList.remove('border-amber-400', 'bg-amber-50/50');
+      }
+      renderSummaryTable();
+    }
+
+    function setLastChanceCaller(idx) { state.lastChanceCaller = idx; renderCallerButtons(); renderSummaryTable(); }
+
+    function computeFinalRoundResults() {
+      const results = [];
+      for (let i = 0; i < state.playerCount; i++) {
+        const calc = calculatePlayerScore(state.roundData[i]);
+        results.push({
+          index: i, name: state.players[i].name, base: calc.base,
+          colorBonus: calc.colorBonus, mermaidWin: calc.mermaidWin,
+          finalScore: calc.base, note: ''
+        });
+      }
+
+      let verdict = null;
+      if (state.endMode === 'last_chance') {
+        const callerIdx = state.lastChanceCaller;
+        const callerBase = results[callerIdx].base;
+        const othersMaxBase = Math.max(...results.filter((_, idx) => idx !== callerIdx).map(r => r.base));
+        const isSuccess = callerBase >= othersMaxBase;
+        verdict = { isSuccess, callerName: results[callerIdx].name, callerBase, othersMaxBase };
+
+        results.forEach((r, idx) => {
+          if (isSuccess) {
+            if (idx === callerIdx) { r.finalScore = r.base + r.colorBonus; r.note = '宣言成功 (素点+色)'; }
+            else { r.finalScore = r.colorBonus; r.note = '色ボーナスのみ'; }
+          } else {
+            if (idx === callerIdx) { r.finalScore = r.colorBonus; r.note = '宣言失敗 (色のみ)'; }
+            else { r.finalScore = r.base; r.note = '素点のみ獲得'; }
+          }
+        });
+      }
+      return { results, verdict };
+    }
+
+    function commitRoundScores() {
+      const { results, verdict } = computeFinalRoundResults();
+      results.forEach(r => state.players[r.index].totalScore += r.finalScore);
+      state.history.unshift({
+        roundNum: state.history.length + 1, mode: state.endMode, verdict,
+        results: results.map(r => ({ name: r.name, finalScore: r.finalScore, note: r.note, mermaidWin: r.mermaidWin }))
+      });
+
+      resetCurrentRoundInputs(); renderAll();
+
+      const target = TARGET_SCORES[state.playerCount];
+      const mermaidWinner = results.find(r => r.mermaidWin);
+      if (mermaidWinner) { alert(`🧜‍♀️ ${mermaidWinner.name} が人魚を4枚集めて特殊勝利しました！`); return; }
+      const reached = state.players.slice(0, state.playerCount).filter(p => p.totalScore >= target);
+      if (reached.length > 0) {
+        const top = [...reached].sort((a, b) => b.totalScore - a.totalScore)[0];
+        alert(`🏆 目標の ${target}点 に到達！
+現在のトップは ${top.name}（${top.totalScore}点）です！`);
+      }
+    }
+
+    function resetFullGame() {
+      if (!confirm('全員の累計スコアと履歴をリセットして新しいゲームを始めますか？')) return;
+      state.players.forEach(p => p.totalScore = 0);
+      state.history = []; state.firstPlayerIndex = null;
+      document.getElementById('firstPlayerResult').textContent = '未決定';
+      resetCurrentRoundInputs(); renderAll();
+    }
+
+    function renderAll() {
+      renderPlayerInputs(); renderTabs(); renderActiveHandPanel();
+      renderCallerButtons(); updateEndModeUI(); renderHistory();
+    }
+
+    function renderPlayerInputs() {
+      const grid = document.getElementById('playerInputsGrid');
+      grid.innerHTML = '';
+      for (let i = 0; i < state.playerCount; i++) {
+        const p = state.players[i];
+        const isFirst = state.firstPlayerIndex === i;
+        const card = document.createElement('div');
+        card.className = `flex items-center justify-between gap-2 p-2.5 rounded-xl border ${isFirst ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-slate-50'}`;
+        card.innerHTML = `
+          <div class="flex items-center gap-2 flex-1 min-w-0">
+            <span class="text-xs font-extrabold px-2 py-0.5 rounded bg-sky-100 text-sky-800 shrink-0">P${i + 1}</span>
+            <input type="text" value="${escapeHtml(p.name)}" oninput="updatePlayerName(${i}, this.value)"
+              class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-sm font-bold w-full focus:outline-none focus:border-sky-500">
+          </div>
+          <div class="text-right shrink-0 pl-1">
+            <span class="text-[10px] text-slate-500 block">累計</span>
+            <span class="text-base font-extrabold text-sky-700">${p.totalScore}<span class="text-xs">点</span></span>
+          </div>`;
+        grid.appendChild(card);
+      }
+    }
+
+    function renderTabs() {
+      const tabs = document.getElementById('playerTabs');
+      tabs.innerHTML = '';
+      for (let i = 0; i < state.playerCount; i++) {
+        const active = state.activeTab === i;
+        const calc = calculatePlayerScore(state.roundData[i]);
+        const btn = document.createElement('button');
+        btn.onclick = () => selectTab(i);
+        btn.className = `px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition flex items-center gap-1.5 ${
+          active ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`;
+        btn.innerHTML = `<span>${escapeHtml(state.players[i].name)}</span><span class="px-1.5 py-0.5 rounded-full text-[10px] ${active ? 'bg-sky-800 text-sky-100' : 'bg-white text-slate-700'}">${calc.base}点</span>`;
+        tabs.appendChild(btn);
+      }
+    }
+
+    function renderActiveHandPanel() {
+      const hand = state.roundData[state.activeTab];
+      const previewArea = document.getElementById('photoPreviewArea');
+      if (hand.photoDataUrl) {
+        previewArea.classList.remove('hidden');
+        document.getElementById('photoPreviewImg').src = hand.photoDataUrl;
+        document.getElementById('aiStatusText').textContent = hand.aiMessage;
+      } else {
+        previewArea.classList.add('hidden');
+      }
+
+      const calc = calculatePlayerScore(hand);
+      document.getElementById('liveBaseScore').textContent = calc.base;
+      document.getElementById('liveBreakdownText').textContent = calc.breakdown;
+      document.getElementById('liveColorBonus').textContent = `最多色ボーナス: +${calc.colorBonus}点`;
+
+      const pairGrid = document.getElementById('gridPairCards');
+      const colGrid = document.getElementById('gridCollectionCards');
+      const multGrid = document.getElementById('gridMultiplierCards');
+      pairGrid.innerHTML = ''; colGrid.innerHTML = ''; multGrid.innerHTML = '';
+
+      Object.entries(CARD_DEFS).forEach(([key, def]) => {
+        if (def.category === 'special') return;
+        const count = hand.counts[key];
+        const el = document.createElement('div');
+        el.className = `rounded-xl border p-2.5 flex flex-col justify-between ${count > 0 ? 'bg-sky-50 border-sky-300' : 'bg-slate-50 border-slate-200'}`;
+        el.innerHTML = `
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-extrabold text-slate-800">${def.emoji} ${def.name}</span>
+            ${def.hint ? `<span class="text-[10px] text-slate-500">${def.hint}</span>` : ''}
+          </div>
+          <div class="flex items-center justify-between bg-white rounded-lg px-2 py-1 border border-slate-200">
+            <button onclick="changeCardCount('${key}', -1)" class="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 font-extrabold text-sm">−</button>
+            <span class="font-extrabold text-sm ${count > 0 ? 'text-sky-700' : 'text-slate-400'}">${count}</span>
+            <button onclick="changeCardCount('${key}', 1)" class="w-7 h-7 rounded bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-sm">＋</button>
+          </div>`;
+        if (def.category === 'pair') pairGrid.appendChild(el);
+        if (def.category === 'collection') colGrid.appendChild(el);
+        if (def.category === 'multiplier') multGrid.appendChild(el);
+      });
+
+      document.getElementById('count_mermaid').textContent = hand.counts.mermaid;
+      document.getElementById('count_maxColor').textContent = hand.maxColor;
+      document.getElementById('count_secondColor').textContent = hand.secondColor;
+      document.getElementById('secondColorRow').classList.toggle('hidden', hand.counts.mermaid < 2);
+      renderTabs();
+    }
+
+    function renderCallerButtons() {
+      const box = document.getElementById('callerButtons');
+      box.innerHTML = '';
+      for (let i = 0; i < state.playerCount; i++) {
+        const active = state.lastChanceCaller === i;
+        const btn = document.createElement('button');
+        btn.onclick = () => setLastChanceCaller(i);
+        btn.className = `px-3 py-1.5 rounded-lg text-xs font-extrabold border transition ${
+          active ? 'bg-amber-500 text-white border-amber-600 shadow-sm' : 'bg-white text-slate-700 border-amber-300 hover:bg-amber-100'}`;
+        btn.textContent = `⚡ ${state.players[i].name}`;
+        box.appendChild(btn);
+      }
+    }
+
+    function renderSummaryTable() {
+      const { results, verdict } = computeFinalRoundResults();
+      const tbody = document.getElementById('roundSummaryBody');
+      tbody.innerHTML = '';
+
+      results.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="py-2.5 px-3 font-bold text-slate-800">${escapeHtml(r.name)}${r.note ? `<span class="block text-[10px] font-normal text-slate-500">${r.note}</span>` : ''}</td>
+          <td class="py-2.5 px-2 text-right font-bold text-slate-600">${r.base}点</td>
+          <td class="py-2.5 px-2 text-right font-bold text-indigo-600">+${r.colorBonus}点</td>
+          <td class="py-2.5 px-3 text-right font-extrabold text-base text-sky-700">+${r.finalScore}点</td>`;
+        tbody.appendChild(tr);
+      });
+
+      const banner = document.getElementById('lastChanceVerdictBanner');
+      if (verdict) {
+        banner.classList.remove('hidden');
+        if (verdict.isSuccess) {
+          banner.className = 'mb-4 p-3 rounded-xl text-xs font-extrabold bg-emerald-50 border border-emerald-300 text-emerald-800';
+          banner.textContent = `🎉 ラストチャンス成功！宣言者（${verdict.callerName}: ${verdict.callerBase}点）が他プレイヤーの最高素点（${verdict.othersMaxBase}点）以上のため、宣言者は「素点＋色ボーナス」、他プレイヤーは「色ボーナスのみ」になります。`;
+        } else {
+          banner.className = 'mb-4 p-3 rounded-xl text-xs font-extrabold bg-rose-50 border border-rose-300 text-rose-800';
+          banner.textContent = `💦 ラストチャンス失敗！宣言者（${verdict.callerName}: ${verdict.callerBase}点）より高い素点のプレイヤー（${verdict.othersMaxBase}点）がいるため、宣言者は「色ボーナスのみ」、他プレイヤーは「素点のみ」になります。`;
+        }
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    function renderHistory() {
+      const list = document.getElementById('historyList');
+      if (state.history.length === 0) {
+        list.innerHTML = '<p class="text-xs text-slate-500">まだ記録されたラウンドはありません。</p>';
+        return;
+      }
+      list.innerHTML = state.history.map(h => {
+        const modeBadge = h.mode === 'last_chance'
+          ? `<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">⚡ ラストチャンス(${h.verdict.isSuccess ? '成功' : '失敗'})</span>`
+          : `<span class="bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-bold">✋ ストップ</span>`;
+        const scores = h.results.map(r => `${escapeHtml(r.name)}: <strong>+${r.finalScore}点</strong>`).join(' / ');
+        return `
+          <div class="border-b border-slate-100 py-2.5 last:border-none flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div class="flex items-center gap-2"><span class="font-extrabold text-slate-700">Round ${h.roundNum}</span>${modeBadge}</div>
+            <div class="text-slate-700">${scores}</div>
+          </div>`;
+      }).join('');
+    }
+
+    function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); }
+    function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
+    function saveApiKey() {
+      const val = document.getElementById('apiKeyInput').value.trim();
+      if (val) localStorage.setItem('ssp_gemini_api_key', val);
+      else localStorage.removeItem('ssp_gemini_api_key');
+      closeSettingsModal();
+    }
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+    }
+
+    init();
+  </script>
+</body>
+</html>

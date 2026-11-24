@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0369a1"/>
+  <circle cx="256" cy="256" r="200" fill="#0284c7" opacity="0.45"/>
+  <!-- 折り紙のヨット -->
+  <polygon points="256,88 384,304 256,304" fill="#ffffff"/>
+  <polygon points="240,124 240,304 136,304" fill="#e0f2fe"/>
+  <!-- 船体 -->
+  <polygon points="104,324 408,324 360,392 152,392" fill="#fbbf24"/>
+  <polygon points="256,324 408,324 360,392 256,392" fill="#f59e0b"/>
+  <!-- 波ライン -->
+  <path d="M96,424 Q176,404 256,424 T416,424" fill="none" stroke="#bae6fd" stroke-width="16" stroke-linecap="round"/>
+</svg>
